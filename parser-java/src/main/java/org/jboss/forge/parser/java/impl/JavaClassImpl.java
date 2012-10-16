@@ -9,12 +9,8 @@ package org.jboss.forge.parser.java.impl;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.eclipse.jdt.core.dom.BodyDeclaration;
-import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.dom.*;
 import org.eclipse.jdt.core.dom.Modifier.ModifierKeyword;
-import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
-import org.eclipse.jdt.core.dom.SimpleType;
-import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jface.text.Document;
 import org.jboss.forge.parser.java.JavaClass;
 import org.jboss.forge.parser.java.JavaSource;
@@ -154,8 +150,12 @@ public class JavaClassImpl extends AbstractJavaSourceMemberHolder<JavaClass> imp
 
    @Override
    public JavaClass setSuperType(final String type)
-   {
+   {      
+      if(Types.isGeneric(type)){
+          return setGenericsSuperType(type);
+      }
       SimpleType simpleType = body.getAST().newSimpleType(body.getAST().newSimpleName(Types.toSimpleName(type)));
+      
       getBodyDeclaration().setStructuralProperty(TypeDeclaration.SUPERCLASS_TYPE_PROPERTY, simpleType);
 
       if (!hasImport(type) && Types.isQualified(type))
@@ -164,6 +164,39 @@ public class JavaClassImpl extends AbstractJavaSourceMemberHolder<JavaClass> imp
       }
 
       return this;
+   }
+   
+   public JavaClass setGenericsSuperType(final String type){
+       int genericsOpenIndex = type.lastIndexOf('<');
+       
+       String mainTypeStr = type.substring(0, genericsOpenIndex);       
+       SimpleType mainType = body.getAST().newSimpleType(body.getAST().newSimpleName(Types.toSimpleName(mainTypeStr)));
+       addImportIfNotExistsAndQualified(mainTypeStr);
+       ParameterizedType  parameterizedType =  body.getAST().newParameterizedType(mainType);
+       
+       String genericsTypesStr = type.substring(genericsOpenIndex+1, type.length()-1);
+       String[] genericTypes = genericsTypesStr.split(",");
+       
+       for (String genericTypeStr : genericTypes) {
+           genericTypeStr = genericTypeStr.trim();
+           parameterizedType.typeArguments().add(createAndImportGenericsType(genericTypeStr));
+       }
+       
+       getBodyDeclaration().setStructuralProperty(TypeDeclaration.SUPERCLASS_TYPE_PROPERTY, parameterizedType);
+       
+       return this;
+   }
+   
+   private SimpleType createAndImportGenericsType(String genericsTypeStr){
+       SimpleType genericsType = body.getAST().newSimpleType(body.getAST().newSimpleName(Types.toSimpleName(genericsTypeStr)));
+       addImportIfNotExistsAndQualified(genericsTypeStr);
+       return genericsType;
+   }
+   
+   private void addImportIfNotExistsAndQualified(String simpleType){
+       if (!hasImport(simpleType) && Types.isQualified(simpleType)){
+          addImport(simpleType);
+       }
    }
 
    @Override
